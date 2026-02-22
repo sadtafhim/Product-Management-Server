@@ -59,6 +59,4 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.listen(port, () => {
-  console.log(`crud server running on port ${port}`);
-});
+module.exports = app;
