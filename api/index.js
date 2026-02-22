@@ -1,62 +1,41 @@
-const express = require("express");
-const cors = require("cors");
-const app = express();
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const port = process.env.PORT || 5000;
+import { MongoClient, ObjectId } from "mongodb";
 
-app.use(cors());
-app.use(express.json());
-require("dotenv").config();
+const client = new MongoClient(process.env.MONGO_URI);
 
-const uri = process.env.MONGO_URI;
-
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
-
-app.get("/", (req, res) => {
-  res.send("server is running!");
-});
-
-async function run() {
-  try {
-    await client.connect();
-    const db = client.db("product_manager");
-    const productCollection = db.collection("products");
-
-    app.post("/products", async (req, res) => {
-      const product_data = req.body;
-      const result = await productCollection.insertOne(product_data);
-      res.send(result);
-    });
-
-    app.get("/products", async (req, res) => {
-      const cursor = productCollection.find();
-      const result = await cursor.toArray();
-      res.send(result);
-    });
-
-    app.delete("/products/:id", async (req, res) => {
-      const result = await productCollection.deleteOne({
-        _id: new ObjectId(req.params.id),
-      });
-      res.send(result);
-    });
-    app.put("/products/:id", async (req, res) => {
-      const result = await productCollection.updateOne(
-        { _id: new ObjectId(req.params.id) },
-        { $set: req.body },
-      );
-      res.send(result);
-    });
-  } finally {
-    // await client.close();
-  }
+async function connectDB() {
+  if (!client.isConnected()) await client.connect();
+  return client.db("product_manager").collection("products");
 }
-run().catch(console.dir);
 
-module.exports = app;
+export default async function handler(req, res) {
+  const productCollection = await connectDB();
+
+  if (req.method === "GET") {
+    const products = await productCollection.find().toArray();
+    return res.status(200).json(products);
+  }
+
+  if (req.method === "POST") {
+    const product_data = req.body;
+    const result = await productCollection.insertOne(product_data);
+    return res.status(201).json(result);
+  }
+
+  if (req.method === "PUT") {
+    const { id, ...data } = req.body;
+    const result = await productCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: data },
+    );
+    return res.status(200).json(result);
+  }
+
+  if (req.method === "DELETE") {
+    const { id } = req.query;
+    const result = await productCollection.deleteOne({ _id: new ObjectId(id) });
+    return res.status(200).json(result);
+  }
+
+  res.setHeader("Allow", ["GET", "POST", "PUT", "DELETE"]);
+  res.status(405).end(`Method ${req.method} Not Allowed`);
+}
